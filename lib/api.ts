@@ -2,7 +2,7 @@ import ApiClient from "@/services/apiClient";
 
 // Create a singleton instance of ApiClient
 // Use consistent URL format with environment variable fallback
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://gamekey.onrender.com";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://gamekey-fbsj.onrender.com";
 const api = new ApiClient(API_URL);
 
 // Add global debug function
