@@ -1,237 +1,311 @@
-import { 
-  IUser, 
-  IProduct, 
-  ICategory, 
-  IOrder, 
-  IPaymentTransaction, 
+import {
+  IUser,
+  IProduct,
+  IOrder,
+  IPaymentTransaction,
+  ICategory,
   INotification,
-  IPaginatedResponse,
-  IQueryParams,
-  ApiError
-} from '../types/interfaces';
+  PaginatedResponse,
+  ApiResponse,
+  CreateUserRequest,
+  UpdateUserRequest,
+  CreateProductRequest,
+  UpdateProductRequest,
+  CreateOrderRequest,
+  UpdateOrderStatusRequest,
+  FulfillOrderRequest,
+  CreateCategoryRequest,
+  UpdateCategoryRequest,
+  CreateBulkNotificationRequest,
+  SendMessageRequest,
+  GetUsersParams,
+  GetProductsParams,
+  GetOrdersParams,
+  GetPaymentsParams,
+  GetNotificationsParams,
+} from "@/types/interfaces";
 
-/**
- * API Client for backend interactions
- */
 class ApiClient {
-  private baseUrl: string;
+  private baseURL: string;
 
-  constructor(baseUrl: string = 'https://gamekey.onrender.com') {
-    this.baseUrl = baseUrl;
+  constructor(baseURL: string) {
+    this.baseURL = baseURL;
   }
 
-
-  
   /**
-   * Helper method for API requests
+   * Generic fetch wrapper with error handling
    */
   private async request<T>(
-    endpoint: string, 
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET',
-    data?: any,
-    queryParams?: IQueryParams
+    endpoint: string,
+    options?: RequestInit
   ): Promise<T> {
-    // Build URL with query parameters
-    let url = `${this.baseUrl}${endpoint}`;
-    if (queryParams && Object.keys(queryParams).length > 0) {
-      const params = new URLSearchParams();
-      for (const [key, value] of Object.entries(queryParams)) {
-        if (value !== undefined && value !== null) {
-          params.append(key, String(value));
-        }
-      }
-      url = `${url}?${params.toString()}`;
-    }
-
-    // Set up headers
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
-
-    const config: RequestInit = {
-      method,
-      headers,
-    };
-
-    if (data) {
-      config.body = JSON.stringify(data);
-    }
+    const url = `${this.baseURL}${endpoint}`;
 
     try {
-      console.log(`Fetching from: ${url}`);
-      const response = await fetch(url, config);
-      
-      // Improve error handling with more specific messages
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+        },
+      });
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.message || `API error: ${response.status}`;
-        console.error(`API error: ${response.status} - ${errorMessage}`);
-        throw new Error(errorMessage);
+        throw new Error(
+          errorData.message || `HTTP error! status: ${response.status}`
+        );
       }
-      
-      // Handle empty responses
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        return await response.json();
-      }
-      
-      return {} as T;
+
+      const data = await response.json();
+      return data;
     } catch (error) {
-      console.error("Request failed:", error);
-      // Provide more details in the error message
-      if (error instanceof Error) {
-        throw new Error(`${error.message} (URL: ${url})`);
+      console.error(`API Error [${endpoint}]:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Build query string from params object
+   */
+  private buildQueryString(params: Record<string, any>): string {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        queryParams.append(key, String(value));
       }
-      throw new Error(`Unknown error occurred while fetching ${url}`);
-    }
+    });
+    const queryString = queryParams.toString();
+    return queryString ? `?${queryString}` : "";
   }
 
-  // User endpoints
-  async getUsers(params?: IQueryParams): Promise<IPaginatedResponse<IUser>> {
-    return this.request<IPaginatedResponse<IUser>>('/api/users', 'GET', undefined, params);
-  }
+  // ==================== USERS ====================
 
-  async getUserById(id: string): Promise<IUser> {
-    return this.request<IUser>(`/api/users/${id}`);
-  }
-
-  async createUser(userData: Omit<IUser, '_id' | 'createdAt' | 'updatedAt'>): Promise<IUser> {
-    return this.request<IUser>('/api/users', 'POST', userData);
-  }
-
-  async updateUser(id: string, userData: Partial<IUser>): Promise<IUser> {
-    return this.request<IUser>(`/api/users/${id}`, 'PUT', userData);
-  }
-
-  async deleteUser(id: string): Promise<void> {
-    return this.request<void>(`/api/users/${id}`, 'DELETE');
-  }
-
-  // Product endpoints
-  async getProducts(params?: IQueryParams): Promise<IPaginatedResponse<IProduct>> {
-    return this.request<IPaginatedResponse<IProduct>>('/api/products', 'GET', undefined, params);
-  }
-
-  async getProductById(id: string): Promise<IProduct> {
-    return this.request<IProduct>(`/api/products/${id}`);
-  }
-
-  async createProduct(product: Omit<IProduct, '_id' | 'createdAt' | 'updatedAt'>): Promise<IProduct> {
-    return this.request<IProduct>('/api/products', 'POST', product);
-  }
-
-  async updateProduct(id: string, productData: Partial<IProduct>): Promise<IProduct> {
-    return this.request<IProduct>(`/api/products/${id}`, 'PUT', productData);
-  }
-
-  async deleteProduct(id: string): Promise<void> {
-    return this.request<void>(`/api/products/${id}`, 'DELETE');
-  }
-
-  // Category endpoints
-  async getCategories(): Promise<ICategory[]> {
-    return this.request<ICategory[]>('/api/categories');
-  }
-
-  async getCategoryById(id: string): Promise<ICategory> {
-    return this.request<ICategory>(`/api/categories/${id}`);
-  }
-
-  async createCategory(category: Omit<ICategory, '_id' | 'createdAt' | 'updatedAt'>): Promise<ICategory> {
-    return this.request<ICategory>('/api/categories', 'POST', category);
-  }
-
-  async updateCategory(id: string, categoryData: Partial<ICategory>): Promise<ICategory> {
-    return this.request<ICategory>(`/api/categories/${id}`, 'PUT', categoryData);
-  }
-
-  async deleteCategory(id: string): Promise<void> {
-    return this.request<void>(`/api/categories/${id}`, 'DELETE');
-  }
-
-  // Order endpoints
-  async getOrders(): Promise<{orders: IOrder[], total: number} | IOrder[]> {
-    return this.request<{orders: IOrder[], total: number} | IOrder[]>('/api/orders');
-  }
-
-  async getOrderById(id: string): Promise<IOrder> {
-    return this.request<IOrder>(`/api/orders/${id}`);
-  }
-
-  async updateOrderStatus(
-    id: string, 
-    status: 'pending' | 'completed' | 'cancelled',
-    note?: string
-  ): Promise<IOrder> {
-    return this.request<IOrder>(`/api/orders/${id}/status`, 'PUT', { status, note });
-  }
-
-  async fulfillPreorder(
-    orderId: string, 
-    data: {
-      digitalContent: string,
-      note?: string
-    }
-  ): Promise<IOrder> {
-    return this.request<IOrder>(`/api/orders/${orderId}/fulfill`, 'POST', data);
-  }
-
-  // Payment endpoints
-  async getPayments(): Promise<{transactions: IPaymentTransaction[], total: number}> {
-    return this.request<{transactions: IPaymentTransaction[], total: number}>('/api/payments');
-  }
-
-  async getPaymentById(id: string): Promise<IPaymentTransaction> {
-    return this.request<IPaymentTransaction>(`/api/payments/${id}`);
-  }
-
-  async updatePaymentStatus(
-    id: string, 
-    status: 'pending' | 'completed' | 'failed' | 'cancelled'
-  ): Promise<IPaymentTransaction> {
-    return this.request<IPaymentTransaction>(`/api/payments/${id}/status`, 'PUT', { status });
-  }
-
-  // User messaging endpoints
-  async sendMessageToUser(
-    telegramId: string,
-    data: { message: string }
-  ): Promise<{ success: boolean; messageId?: string }> {
-    return this.request<{ success: boolean; messageId?: string }>(
-      `/api/users/${telegramId}/send-message`, 
-      'POST', 
-      data
+  async getUsers(
+    params?: GetUsersParams
+  ): Promise<PaginatedResponse<IUser> | ApiResponse<IUser[]>> {
+    const queryString = params ? this.buildQueryString(params) : "";
+    return this.request<PaginatedResponse<IUser> | ApiResponse<IUser[]>>(
+      `/users${queryString}`
     );
   }
 
-  // Notification endpoints
-  async getNotifications(params?: IQueryParams): Promise<IPaginatedResponse<INotification>> {
-    return this.request<IPaginatedResponse<INotification>>('/api/notifications', 'GET', undefined, params);
+  async createUser(data: CreateUserRequest): Promise<ApiResponse<IUser>> {
+    return this.request<ApiResponse<IUser>>("/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
-  async createNotification(notification: Omit<INotification, '_id' | 'createdAt'>): Promise<INotification> {
-    return this.request<INotification>('/api/notifications', 'POST', notification);
+  async getUser(id: string): Promise<ApiResponse<IUser>> {
+    return this.request<ApiResponse<IUser>>(`/users/${id}`);
   }
 
-  async updateNotification(id: string, data: Partial<INotification>): Promise<INotification> {
-    return this.request<INotification>(`/api/notifications/${id}`, 'PUT', data);
+  async getUserByTelegramId(telegramId: number): Promise<ApiResponse<IUser>> {
+    return this.request<ApiResponse<IUser>>(`/users/telegram/${telegramId}`);
   }
 
-  async deleteNotification(id: string): Promise<void> {
-    return this.request<void>(`/api/notifications/${id}`, 'DELETE');
+  async updateUser(
+    id: string,
+    data: UpdateUserRequest
+  ): Promise<ApiResponse<IUser>> {
+    return this.request<ApiResponse<IUser>>(`/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
   }
 
-  // Analytics endpoints
-  async getAnalyticsSummary(dateRange?: { startDate: string, endDate: string }): Promise<any> {
-    return this.request<any>('/api/analytics/summary', 'GET', undefined, dateRange);
+  async sendMessageToUser(
+    userId: string,
+    data: SendMessageRequest
+  ): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/users/${userId}/send-message`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
-  async getRevenueData(dateRange?: { startDate: string, endDate: string }): Promise<any> {
-    return this.request<any>('/api/analytics/revenue', 'GET', undefined, dateRange);
+  // ==================== PRODUCTS ====================
+
+  async getProducts(
+    params?: GetProductsParams
+  ): Promise<PaginatedResponse<IProduct> | ApiResponse<IProduct[]>> {
+    const queryString = params ? this.buildQueryString(params) : "";
+    return this.request<PaginatedResponse<IProduct> | ApiResponse<IProduct[]>>(
+      `/products${queryString}`
+    );
   }
 
-  async getUserAnalytics(dateRange?: { startDate: string, endDate: string }): Promise<any> {
-    return this.request<any>('/api/analytics/users', 'GET', undefined, dateRange);
+  async createProduct(
+    data: CreateProductRequest
+  ): Promise<ApiResponse<IProduct>> {
+    return this.request<ApiResponse<IProduct>>("/products", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getProduct(id: string): Promise<ApiResponse<IProduct>> {
+    return this.request<ApiResponse<IProduct>>(`/products/${id}`);
+  }
+
+  async updateProduct(
+    id: string,
+    data: UpdateProductRequest
+  ): Promise<ApiResponse<IProduct>> {
+    return this.request<ApiResponse<IProduct>>(`/products/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteProduct(id: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/products/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ==================== ORDERS ====================
+
+  async getOrders(
+    params?: GetOrdersParams
+  ): Promise<{ orders: IOrder[]; total: number } | ApiResponse<IOrder[]> | PaginatedResponse<IOrder>> {
+    const queryString = params ? this.buildQueryString(params) : "";
+    return this.request<{ orders: IOrder[]; total: number } | ApiResponse<IOrder[]> | PaginatedResponse<IOrder>>(
+      `/orders${queryString}`
+    );
+  }
+
+  async createOrder(data: CreateOrderRequest): Promise<ApiResponse<IOrder>> {
+    return this.request<ApiResponse<IOrder>>("/orders", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getOrder(id: string): Promise<ApiResponse<IOrder>> {
+    return this.request<ApiResponse<IOrder>>(`/orders/${id}`);
+  }
+
+  async getOrdersByUser(
+    userId: string,
+    params?: { page?: number; limit?: number }
+  ): Promise<PaginatedResponse<IOrder>> {
+    const queryString = params ? this.buildQueryString(params) : "";
+    return this.request<PaginatedResponse<IOrder>>(
+      `/orders/user/${userId}${queryString}`
+    );
+  }
+
+  async updateOrderStatus(
+    id: string,
+    data: UpdateOrderStatusRequest
+  ): Promise<ApiResponse<IOrder>> {
+    return this.request<ApiResponse<IOrder>>(`/orders/${id}/status`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async fulfillOrder(
+    id: string,
+    data: FulfillOrderRequest
+  ): Promise<ApiResponse<IOrder>> {
+    return this.request<ApiResponse<IOrder>>(`/orders/${id}/fulfill`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async syncOrderStatuses(): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>("/orders/sync-statuses", {
+      method: "POST",
+    });
+  }
+
+  async getSalesStats(params?: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<any>> {
+    const queryString = params ? this.buildQueryString(params) : "";
+    return this.request<ApiResponse<any>>(`/orders/stats/sales${queryString}`);
+  }
+
+  // ==================== PAYMENTS ====================
+
+  async getPayments(
+    params?: GetPaymentsParams
+  ): Promise<{ transactions: IPaymentTransaction[]; total: number }> {
+    const queryString = params ? this.buildQueryString(params) : "";
+    return this.request<{
+      transactions: IPaymentTransaction[];
+      total: number;
+    }>(`/payments${queryString}`);
+  }
+
+  // ==================== CATEGORIES ====================
+
+  async getCategories(): Promise<ApiResponse<ICategory[]>> {
+    return this.request<ApiResponse<ICategory[]>>("/categories");
+  }
+
+  async createCategory(
+    data: CreateCategoryRequest
+  ): Promise<ApiResponse<ICategory>> {
+    return this.request<ApiResponse<ICategory>>("/categories", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getCategory(id: string): Promise<ApiResponse<ICategory>> {
+    return this.request<ApiResponse<ICategory>>(`/categories/${id}`);
+  }
+
+  async updateCategory(
+    id: string,
+    data: UpdateCategoryRequest
+  ): Promise<ApiResponse<ICategory>> {
+    return this.request<ApiResponse<ICategory>>(`/categories/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCategory(id: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/categories/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ==================== NOTIFICATIONS ====================
+
+  async getNotifications(
+    params?: GetNotificationsParams
+  ): Promise<ApiResponse<INotification[]>> {
+    const queryString = params ? this.buildQueryString(params) : "";
+    return this.request<ApiResponse<INotification[]>>(
+      `/notifications${queryString}`
+    );
+  }
+
+  async createBulkNotification(
+    data: CreateBulkNotificationRequest
+  ): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>("/notifications", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getNotification(id: string): Promise<ApiResponse<INotification>> {
+    return this.request<ApiResponse<INotification>>(`/notifications/${id}`);
+  }
+
+  async deleteNotification(id: string): Promise<ApiResponse<any>> {
+    return this.request<ApiResponse<any>>(`/notifications/${id}`, {
+      method: "DELETE",
+    });
   }
 }
 

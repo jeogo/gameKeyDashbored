@@ -18,7 +18,6 @@ export default function Dashboard() {
     totalOrders: 0,
     totalProducts: 0,
     totalRevenue: 0,
-    pendingApprovals: 0,
     activeCategories: 0,
     availableProducts: 0,
     totalCategories: 0,
@@ -29,7 +28,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboardData()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchDashboardData = async () => {
     try {
@@ -61,14 +60,12 @@ export default function Dashboard() {
         users = usersResponse.data
       }
       
-      // Process orders data
+      // Process orders data - Updated for backend API structure
       let orders: IOrder[] = []
       if (Array.isArray(ordersResponse)) {
         orders = ordersResponse
-      } else if (ordersResponse && typeof ordersResponse === 'object' && 'orders' in ordersResponse) {
-        orders = ordersResponse.orders
       } else if (ordersResponse && typeof ordersResponse === 'object' && 'data' in ordersResponse && Array.isArray((ordersResponse as { data: IOrder[] }).data)) {
-        orders = ordersResponse as IOrder[]
+        orders = (ordersResponse as { data: IOrder[] }).data
       }
       
       // Process products data
@@ -79,39 +76,42 @@ export default function Dashboard() {
         products = productsResponse.data
       }
       
-      // Process payments data
+      // Process payments data - Backend returns { transactions: [], total: number }
       let payments: IPaymentTransaction[] = []
       if (Array.isArray(paymentsResponse)) {
         payments = paymentsResponse
-      } else if (paymentsResponse && typeof paymentsResponse === 'object' && 'transactions' in paymentsResponse) {
-        payments = paymentsResponse.transactions
+      } else if (paymentsResponse && typeof paymentsResponse === 'object' && 'transactions' in paymentsResponse && Array.isArray((paymentsResponse as { transactions: IPaymentTransaction[] }).transactions)) {
+        payments = (paymentsResponse as { transactions: IPaymentTransaction[] }).transactions
       }
       
-      // Process categories data
-      let categories = Array.isArray(categoriesResponse) ? categoriesResponse : []
+      // Process categories data - Backend returns { success: boolean, data: [] }
+      let categories = []
+      if (Array.isArray(categoriesResponse)) {
+        categories = categoriesResponse
+      } else if (categoriesResponse && Array.isArray(categoriesResponse.data)) {
+        categories = categoriesResponse.data
+      }
       
       // Calculate metrics
-      const pendingUsers = users.filter(user => !user.isAccepted).length
       const availableProducts = products.filter(product => product.isAvailable).length
-      const totalRevenue = payments.reduce((sum, payment) => 
+      const totalRevenue = payments.reduce((sum, payment) =>
         payment.status === "completed" ? sum + payment.amount : sum, 0)
-      
+
       // Get recent data
-      const recentOrders = [...orders].sort((a, b) => 
+      const recentOrders = [...orders].sort((a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ).slice(0, 5)
-      
-      const recentUsers = [...users].sort((a, b) => 
+
+      const recentUsers = [...users].sort((a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ).slice(0, 5)
-      
+
       // Update state
       setMetrics({
         totalUsers: users.length,
         totalOrders: orders.length,
         totalProducts: products.length,
         totalRevenue,
-        pendingApprovals: pendingUsers,
         activeCategories: categories.length,
         availableProducts,
         totalCategories: categories.length,
@@ -143,11 +143,14 @@ export default function Dashboard() {
     })
   }
   
-  // Helper function for status badges
+  // Helper function for status badges - Updated for backend API statuses
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'delivered':
       case 'completed':
-        return <Badge className="bg-green-100 text-green-800">Completed</Badge>
+        return <Badge className="bg-green-100 text-green-800">Delivered</Badge>
+      case 'paid':
+        return <Badge className="bg-blue-100 text-blue-800">Paid</Badge>
       case 'pending':
         return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>
       case 'cancelled':
@@ -192,9 +195,8 @@ export default function Dashboard() {
             ) : (
               <>
                 <div className="text-2xl font-bold">{metrics.totalUsers}</div>
-                <div className="flex items-center text-xs text-green-600 mt-1">
-                  <ArrowUpRight className="h-3 w-3 mr-1" />
-                  <span>{metrics.pendingApprovals} pending approvals</span>
+                <div className="flex items-center text-xs text-muted-foreground mt-1">
+                  <span>Registered users</span>
                 </div>
               </>
             )}
@@ -213,7 +215,7 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold">{metrics.totalOrders}</div>
                 <div className="flex items-center text-xs text-green-600 mt-1">
                   <ArrowUpRight className="h-3 w-3 mr-1" />
-                  <span>{recentOrders.filter(o => o.type === "preorder").length} preorders</span>
+                  <span>{recentOrders.filter(o => o.status === "pending").length} pending orders</span>
                 </div>
               </>
             )}
@@ -263,16 +265,16 @@ export default function Dashboard() {
         <Card>
           <CardHeader>
             <CardTitle>User Management</CardTitle>
-            <CardDescription>Manage user accounts and permissions</CardDescription>
+            <CardDescription>Manage user accounts and send messages</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Pending Approvals</p>
+                <p className="text-sm font-medium">Total Users</p>
                 {loading ? (
                   <Skeleton className="h-4 w-20" />
                 ) : (
-                  <p className="text-xs text-muted-foreground">{metrics.pendingApprovals} users waiting</p>
+                  <p className="text-xs text-muted-foreground">{metrics.totalUsers} registered users</p>
                 )}
               </div>
               <Button variant="outline" size="sm" asChild>
@@ -357,7 +359,7 @@ export default function Dashboard() {
                     <div className="flex-1">
                       <p className="text-sm font-medium">Order #{order._id?.substring(0, 8)}</p>
                       <p className="text-xs text-muted-foreground">
-                        Type: {order.type} • ${order.totalAmount.toFixed(2)}
+                        Status: {order.status} • ${order.totalAmount.toFixed(2)}
                       </p>
                     </div>
                     {getStatusBadge(order.status)}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -13,26 +13,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Check, MoreVertical, Search, X, UserCircle, MessageSquare, Download, RefreshCw } from "lucide-react"
+import { MoreVertical, Search, UserCircle, MessageSquare, RefreshCw, Users, Mail, Calendar, AlertCircle } from "lucide-react"
 import { IUser } from "@/types/interfaces"
 import api from "@/lib/api"
 import { useToast } from "@/components/ui/use-toast"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function UsersPage() {
   const [users, setUsers] = useState<IUser[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string | null>(null)
   const [selectedUser, setSelectedUser] = useState<IUser | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -43,472 +37,398 @@ export default function UsersPage() {
 
   // Fetch users from API
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    fetchUsers()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchUsers = async () => {
     try {
-      setLoading(true);
-      setIsRefreshing(true);
-      console.log("Fetching users...");
-      
-      try {
-        const response = await api.getUsers();
-        console.log("API response:", response);
-        
-        if (Array.isArray(response)) {
-          setUsers(response);
-        } else if (response && Array.isArray(response.data)) {
-          setUsers(response.data);
-        } else {
-          setUsers([]);
-          console.warn("Unexpected API response format:", response);
-        }
-      } catch (error) {
-        console.error("API call failed:", error);
-        setUsers([]);
-        
-        toast({
-          title: "Error",
-          description: "Failed to load users. Please try again.",
-          variant: "destructive",
-        });
+      setLoading(true)
+      setError(null)
+
+      const response = await api.getUsers()
+
+      // Handle the paginated response structure
+      let userData: IUser[] = []
+      if (Array.isArray(response)) {
+        userData = response
+      } else if (response && typeof response === 'object' && 'data' in response) {
+        userData = response.data as IUser[]
       }
+
+      setUsers(userData)
     } catch (error) {
-      console.error("Failed to fetch users:", error);
-      setUsers([]);
+      console.error("Failed to fetch users:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to load users"
+      setError(errorMessage)
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
-      setLoading(false);
-      setIsRefreshing(false);
+      setLoading(false)
+      setIsRefreshing(false)
     }
-  };
+  }
 
-  // Filter users based on search term and status filter
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    await fetchUsers()
+  }
+
+  // Filter users based on search term
   const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.telegramId?.toString().includes(searchTerm.toLowerCase()) ||
-      (user.username && user.username.toLowerCase().includes(searchTerm.toLowerCase()))
+    const matchesSearch = !searchTerm ||
+      user.telegramId?.toString().includes(searchTerm) ||
+      (user.username && user.username.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.firstName && user.firstName.toLowerCase().includes(searchTerm.toLowerCase()))
 
-    const matchesStatus =
-      statusFilter === null ||
-      (statusFilter === "accepted" && user.isAccepted) ||
-      (statusFilter === "pending" && !user.isAccepted)
-
-    return matchesSearch && matchesStatus
+    return matchesSearch
   })
 
-  const handleApprove = async (userId: string) => {
-    try {
-      await api.updateUser(userId, { isAccepted: true });
-      
-      // Update local state to reflect the change
-      setUsers(users.map((user) => 
-        user._id === userId 
-          ? { ...user, isAccepted: true, updatedAt: new Date() } 
-          : user
-      ));
-      
-      toast({
-        title: "Success",
-        description: "User has been approved successfully.",
-      });
-      
-      // If we're updating the currently selected user, update that too
-      if (selectedUser && selectedUser._id === userId) {
-        setSelectedUser({ ...selectedUser, isAccepted: true, updatedAt: new Date() });
-      }
-    } catch (error) {
-      console.error("Failed to approve user:", error);
-      toast({
-        title: "Error",
-        description: "Failed to approve user. Please try again.",
-        variant: "destructive",
-      });
-    }
-  }
-
-  const handleDecline = async (userId: string) => {
-    try {
-      await api.updateUser(userId, { isAccepted: false });
-      
-      // Update local state to reflect the change
-      setUsers(users.map((user) => 
-        user._id === userId 
-          ? { ...user, isAccepted: false, updatedAt: new Date() } 
-          : user
-      ));
-      
-      toast({
-        title: "Success",
-        description: "User access has been revoked.",
-      });
-      
-      // If we're updating the currently selected user, update that too
-      if (selectedUser && selectedUser._id === userId) {
-        setSelectedUser({ ...selectedUser, isAccepted: false, updatedAt: new Date() });
-      }
-    } catch (error) {
-      console.error("Failed to revoke user access:", error);
-      toast({
-        title: "Error",
-        description: "Failed to revoke user access. Please try again.",
-        variant: "destructive",
-      });
-    }
-  }
-
-  const handleViewDetails = (user: IUser) => {
-    setSelectedUser(user)
-    setIsDialogOpen(true)
-  }
-
-  const handleOpenMessageDialog = (user: IUser) => {
-    setSelectedUser(user);
-    setMessageText("");
-    setIsMessageDialogOpen(true);
-  }
-
+  // Handle sending message to user
   const handleSendMessage = async () => {
-    if (!selectedUser || !messageText.trim()) return;
-    
-    setIsSendingMessage(true);
-    
+    if (!selectedUser || !messageText.trim()) return
+
     try {
-      // Assume we have an API endpoint to send a message to a user
-      await api.sendMessageToUser(selectedUser.telegramId.toString(), {
-        message: messageText
-      });
-      
+      setIsSendingMessage(true)
+
+      await api.sendMessageToUser(selectedUser._id!, { message: messageText })
+
       toast({
         title: "Message Sent",
-        description: `Message was successfully sent to ${selectedUser.username || "the user"}.`,
-      });
-      
-      setIsMessageDialogOpen(false);
-      setMessageText("");
+        description: "Message sent successfully to user",
+      })
+
+      setMessageText("")
+      setIsMessageDialogOpen(false)
     } catch (error) {
-      console.error("Failed to send message:", error);
+      console.error("Failed to send message:", error)
       toast({
         title: "Error",
         description: "Failed to send message. Please try again.",
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsSendingMessage(false);
+      setIsSendingMessage(false)
     }
   }
 
-  const formatDate = (dateValue: string | Date) => {
-    const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
+  // Format date helper
+  const formatDate = (dateValue: Date | string) => {
+    const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue
     return date.toLocaleString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    });
+    })
+  }
+
+  // Loading skeleton
+  const UserCardSkeleton = () => (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-12 w-12 rounded-full" />
+          <div className="flex-1">
+            <Skeleton className="h-4 w-32 mb-2" />
+            <Skeleton className="h-3 w-48" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+
+  if (error) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold">User Management</h1>
+          <Button onClick={handleRefresh} disabled={isRefreshing}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Retry
+          </Button>
+        </div>
+
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error}
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
   }
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">User Management</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={fetchUsers} disabled={isRefreshing}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button>
-            <Download className="h-4 w-4 mr-2" />
-            Export Users
-          </Button>
+        <div>
+          <h1 className="text-3xl font-bold">User Management</h1>
+          <p className="text-muted-foreground">
+            View and manage registered users
+          </p>
         </div>
+        <Button onClick={handleRefresh} disabled={isRefreshing} variant="outline">
+          <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Users</CardTitle>
-          <CardDescription>Manage user accounts and permissions</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
-            <div className="relative w-full md:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search by username or ID..."
-                className="pl-8"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            
-            <Select
-              value={statusFilter || "all"}
-              onValueChange={(value) => setStatusFilter(value === "all" ? null : value)}
-            >
-              <SelectTrigger className="w-full md:w-[180px]">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Users</SelectItem>
-                <SelectItem value="accepted">Accepted</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array(6).fill(0).map((_, i) => (
-                <Card key={i} className="overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Skeleton className="h-5 w-24" />
-                        <Skeleton className="h-5 w-5 rounded-full" />
-                      </div>
-                      <div className="space-y-2">
-                        <Skeleton className="h-4 w-20" />
-                        <Skeleton className="h-4 w-32" />
-                      </div>
-                      <Skeleton className="h-6 w-16" />
-                      <div className="pt-4 mt-2 border-t flex justify-end gap-2">
-                        <Skeleton className="h-8 w-8 rounded-md" />
-                        <Skeleton className="h-8 w-8 rounded-md" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : filteredUsers.length === 0 ? (
-            <div className="border rounded-md p-8 text-center text-muted-foreground">
-              <p>No users found</p>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="mt-4"
-                onClick={() => {
-                  setSearchTerm("");
-                  setStatusFilter(null);
-                }}
-              >
-                Clear filters
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredUsers.map((user) => (
-                <Card key={user._id} className="overflow-hidden hover:shadow-md transition-shadow">
-                  <CardContent className="p-0">
-                    <div className="p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <UserCircle className="h-5 w-5 mr-2 text-muted-foreground" />
-                          <h3 className="font-medium truncate" title={user.username || user.telegramId.toString()}>
-                            {user.username || "Anonymous"}
-                          </h3>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewDetails(user)}>
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleOpenMessageDialog(user)}>
-                              Send Message
-                            </DropdownMenuItem>
-                            {!user.isAccepted ? (
-                              <DropdownMenuItem onClick={() => user._id && handleApprove(user._id)}>
-                                Approve User
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem onClick={() => user._id && handleDecline(user._id)}>
-                                Revoke Access
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      
-                      <div className="space-y-1 text-sm">
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Telegram ID</span>
-                          <span>{user.telegramId}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Joined</span>
-                          <span>{formatDate(user.createdAt).split(',')[0]}</span>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        {user.isAccepted ? (
-                          <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100">
-                            Accepted
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
-                            Pending
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="mt-2 bg-muted/40 p-3 border-t flex justify-between items-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenMessageDialog(user)}
-                      >
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Message
-                      </Button>
-                      
-                      {!user.isAccepted ? (
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => user._id && handleApprove(user._id)}
-                        >
-                          <Check className="h-4 w-4 mr-2" />
-                          Approve
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => user._id && handleDecline(user._id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Revoke
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* User Details Dialog */}
-      {selectedUser && (
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>User Details</DialogTitle>
-              <DialogDescription>Detailed information about the user.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Telegram ID</p>
-                  <p>{selectedUser.telegramId}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Username</p>
-                  <p>{selectedUser.username || "N/A"}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Created At</p>
-                  <p>{formatDate(selectedUser.createdAt)}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
-                  <p>{formatDate(selectedUser.updatedAt)}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Status</p>
-                  <p>{selectedUser.isAccepted ? "Accepted" : "Pending"}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">MongoDB ID</p>
-                  <p className="text-xs truncate">{selectedUser._id}</p>
-                </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-500" />
+              <div>
+                <p className="text-sm font-medium">Total Users</p>
+                <p className="text-2xl font-bold">{users.length}</p>
               </div>
             </div>
-            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setIsDialogOpen(false);
-                  handleOpenMessageDialog(selectedUser);
-                }}
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Send Message
-              </Button>
-              
-              {!selectedUser.isAccepted ? (
-                <Button onClick={() => selectedUser._id && handleApprove(selectedUser._id)}>
-                  <Check className="h-4 w-4 mr-2" />
-                  Approve User
-                </Button>
-              ) : (
-                <Button variant="destructive" onClick={() => selectedUser._id && handleDecline(selectedUser._id)}>
-                  <X className="h-4 w-4 mr-2" />
-                  Revoke Access
-                </Button>
-              )}
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-purple-500" />
+              <div>
+                <p className="text-sm font-medium">This Month</p>
+                <p className="text-2xl font-bold">
+                  {users.filter(user => {
+                    const userDate = new Date(user.createdAt)
+                    const currentDate = new Date()
+                    return userDate.getMonth() === currentDate.getMonth() &&
+                           userDate.getFullYear() === currentDate.getFullYear()
+                  }).length}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-green-500" />
+              <div>
+                <p className="text-sm font-medium">Active Users</p>
+                <p className="text-2xl font-bold">{users.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search users by ID, username, or name..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
+      {/* Users Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {loading ? (
+          Array(6).fill(0).map((_, i) => <UserCardSkeleton key={i} />)
+        ) : filteredUsers.length === 0 ? (
+          <div className="col-span-full text-center py-12">
+            <UserCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium">No users found</h3>
+            <p className="text-muted-foreground">
+              {searchTerm
+                ? "Try adjusting your search"
+                : "No users have been registered yet"}
+            </p>
+          </div>
+        ) : (
+          filteredUsers.map((user) => (
+            <Card key={user._id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <UserCircle className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">
+                        {user.firstName || user.username || `User${user.telegramId}`}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        ID: {user.telegramId}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-sm text-muted-foreground mb-4">
+                  {user.username && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      <span>@{user.username}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    <span>Joined {formatDate(user.createdAt)}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setSelectedUser(user)
+                      setIsDialogOpen(true)
+                    }}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    <UserCircle className="h-4 w-4 mr-1" />
+                    View Details
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setSelectedUser(user)
+                      setIsMessageDialogOpen(true)
+                    }}
+                    className="flex-1"
+                  >
+                    <MessageSquare className="h-4 w-4 mr-1" />
+                    Send Message
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
+      {/* User Details Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>User Details</DialogTitle>
+            <DialogDescription>
+              Detailed information about the user
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <UserCircle className="h-8 w-8 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium">
+                    {selectedUser.firstName || selectedUser.username || `User${selectedUser.telegramId}`}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">Telegram User</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <label className="font-medium text-muted-foreground">Telegram ID</label>
+                  <p>{selectedUser.telegramId}</p>
+                </div>
+                {selectedUser.username && (
+                  <div>
+                    <label className="font-medium text-muted-foreground">Username</label>
+                    <p>@{selectedUser.username}</p>
+                  </div>
+                )}
+                {selectedUser.firstName && (
+                  <div>
+                    <label className="font-medium text-muted-foreground">First Name</label>
+                    <p>{selectedUser.firstName}</p>
+                  </div>
+                )}
+                {selectedUser.lastName && (
+                  <div>
+                    <label className="font-medium text-muted-foreground">Last Name</label>
+                    <p>{selectedUser.lastName}</p>
+                  </div>
+                )}
+                <div>
+                  <label className="font-medium text-muted-foreground">Joined</label>
+                  <p>{formatDate(selectedUser.createdAt)}</p>
+                </div>
+                {selectedUser.updatedAt && (
+                  <div>
+                    <label className="font-medium text-muted-foreground">Last Updated</label>
+                    <p>{formatDate(selectedUser.updatedAt)}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={() => {
+              setIsDialogOpen(false)
+              setIsMessageDialogOpen(true)
+            }}>
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Send Message
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Send Message Dialog */}
-      {selectedUser && (
-        <Dialog open={isMessageDialogOpen} onOpenChange={(open) => {
-          if (!isSendingMessage) setIsMessageDialogOpen(open);
-        }}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Send Message</DialogTitle>
-              <DialogDescription>
-                Send a message to {selectedUser.username || `Telegram ID: ${selectedUser.telegramId}`}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              <Textarea
-                placeholder="Enter your message here..."
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                rows={6}
-                className="resize-none"
-              />
-              <p className="text-xs text-muted-foreground mt-2">
-                This message will be sent via Telegram Bot to the user.
-              </p>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsMessageDialogOpen(false)} disabled={isSendingMessage}>
-                Cancel
-              </Button>
-              <Button onClick={handleSendMessage} disabled={isSendingMessage || !messageText.trim()}>
-                {isSendingMessage ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    Send Message
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      <Dialog open={isMessageDialogOpen} onOpenChange={setIsMessageDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Message to User</DialogTitle>
+            <DialogDescription>
+              Send a direct message to {selectedUser?.firstName || selectedUser?.username || `User${selectedUser?.telegramId}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Enter your message here..."
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              rows={4}
+              maxLength={4096}
+            />
+            <p className="text-xs text-muted-foreground">
+              {messageText.length}/4096 characters
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsMessageDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendMessage}
+              disabled={!messageText.trim() || isSendingMessage}
+            >
+              {isSendingMessage ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Send Message
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-

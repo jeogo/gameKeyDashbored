@@ -1,154 +1,204 @@
-/**
- * User model for MongoDB
- */
-interface IUser {
-  _id?: string;               // MongoDB document ID
-  telegramId: number;         // Telegram user ID
-  username?: string;          // Optional Telegram username
-  isAccepted: boolean;        // Whether the user is accepted/approved in the system
-  createdAt: Date;            // Account creation timestamp
-  updatedAt: Date;            // Last update timestamp
+// User Interface
+export interface IUser {
+  _id?: string;
+  telegramId: number;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  createdAt: Date;
+  updatedAt?: Date;
 }
 
-/**
- * Digital Product model for MongoDB
- */
-interface IProduct {
-  _id?: string;              // MongoDB document ID
-  name: string;              // Name of the product
-  description?: string;      // Optional description of the product
-  price: number;             // Price of the product
-  digitalContent: string[];  // Array of "email:password" strings
-  categoryId: string;        // Reference to the category ID
-  allowPreorder: boolean;    // Whether this product can be pre-ordered
-  preorderNote?: string;     // Optional note about pre-orders (e.g., "سيتم التوصيل خلال يومين")
-  createdAt: Date;           // Timestamp when the product was created
-  updatedAt: Date;           // Timestamp when the product was last updated
-  isAvailable: boolean;      // Whether the product is currently available
+// Product Interface
+export interface IProduct {
+  _id?: string;
+  name: string;
+  description?: string;
+  price: number;
+  categoryId: string;
+  isAvailable: boolean;
+  digitalContent: string[];
+  allowPreorder: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-/**
- * Category model for MongoDB
- */
-interface ICategory {
-  _id?: string;              // MongoDB document ID
-  name: string;              // Name of the category (e.g., "Xbox Subscriptions")
-  description?: string;      // Optional description of the category
-  createdAt: Date;           // Timestamp when the category was created
-  updatedAt: Date;           // Timestamp when the category was last updated
+// Order Interface
+export interface IOrder {
+  _id?: string;
+  userId: string;
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  status: "pending" | "paid" | "delivered" | "cancelled";
+  deliveredContent?: string[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-/**
- * Order model for MongoDB
- */
-interface IOrder {
-  _id?: string;                                    // MongoDB document ID
-  userId: string;                                  // User ID reference
-  productId: string;                               // Product ID reference
-  quantity: number;                                // Quantity of products ordered
-  unitPrice: number;                               // Unit price at time of purchase
-  totalAmount: number;                             // Total amount (quantity * unitPrice)
-  type: "purchase" | "preorder";                   // Type of order
-  status: "pending" | "completed" | "cancelled";   // Order status
-  customerNote?: string;                           // Optional note from customer
-  createdAt: Date;                                 // Order creation timestamp
-  updatedAt: Date;                                 // Last update timestamp
-  completedAt?: Date;                              // When order was completed/fulfilled
-  
-  // Preorder specific fields (only used when type is "preorder")
-  preorderConfirmationDate?: Date;                 // Date when preorder was confirmed
-
-  // Status history tracking
-  statusHistory: {
-    status: "pending" | "completed" | "cancelled";
-    timestamp: Date;
-    note?: string;
-  }[];
+// Payment Transaction Interface
+export interface IPaymentTransaction {
+  _id?: string;
+  orderId: string;
+  userId: string;
+  amount: number;
+  currency: string;
+  cryptoType?: string;
+  status: "pending" | "completed" | "failed" | "cancelled" | "refunded";
+  paymentProvider: string;
+  providerTransactionId?: string;
+  paymentUrl?: string;
+  cryptoAddress?: string;
+  createdAt: Date;
 }
 
-/**
- * Payment Transaction model for MongoDB
- */
-interface IPaymentTransaction {
-  _id?: string;                          // MongoDB document ID
-  orderId: string;                       // Reference to store order
-  userId: string;                        // User who made the payment
-  paymentProvider: 'paypal' | 'crypto'  // Payment method
-  
-  // Payment details
-  providerTransactionId?: string;        // Transaction ID from provider
-  amount: number;                        // Transaction amount
-  currency: string;                      // Currency code (USD, EUR, etc)
-  
-  // Status
-  status: 'pending' | 'completed' | 'failed' | 'cancelled'; // Payment status
-  
-  // PayPal specific fields
-  paypalOrderId?: string;                // PayPal order ID
-  paypalCaptureId?: string;              // PayPal capture ID
-  
-  // Crypto specific fields
-  cryptoType?: 'usdt' | 'btc' | 'eth';   // Type of cryptocurrency
-  cryptoNetwork?: string;                // Network (e.g., TRC20, ERC20)
-  cryptoAddress?: string;                // Wallet address for payment
-  cryptoTxHash?: string;                 // Transaction hash on blockchain
-  
-  // Timestamps
-  createdAt: Date;                       // When transaction was created
-  updatedAt: Date;                       // Last update
-  completedAt?: Date;                    // When payment completed
+// Category Interface
+export interface ICategory {
+  _id?: string;
+  name: string;
+  description?: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt?: Date;
 }
 
-/**
- * Notification model for MongoDB
- */
-interface INotification {
-  _id?: string;               // MongoDB document ID
-  title: string;              // Title of the notification
-  message: string;            // Content of the notification
-  audience: "all" | "specific_users"; // Target audience
-  targetUserIds?: number[];   // Telegram IDs for specific users (if audience is "specific_users")
-  createdAt: Date;            // Creation timestamp
+// Notification Interface
+export interface INotification {
+  _id?: string;
+  userId?: string;
+  type: "order" | "payment" | "system" | "promo";
+  title: string;
+  message: string;
+  isRead: boolean;
+  data?: any;
+  createdAt: Date;
 }
 
-// API Error class for better error handling
-export class ApiError extends Error {
-  status: number;
-  data: any;
-
-  constructor(message: string, status: number, data: any = {}) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.data = data;
-  }
+// API Response Interfaces
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination?: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    itemsPerPage: number;
+  };
+  total?: number;
+  success?: boolean;
 }
 
-// Authentication interfaces
-export interface IAuthResponse {
-  token: string;
-  user: IUser;
-  expiresAt?: string;
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
 }
 
-// Pagination and query parameters
-export interface IQueryParams {
+// API Request Interfaces
+export interface CreateUserRequest {
+  telegramId: number;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface UpdateUserRequest {
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface CreateProductRequest {
+  name: string;
+  categoryId: string;
+  price: number;
+  description?: string;
+  isAvailable?: boolean;
+  digitalContent: string[]; // REQUIRED - must be non-empty array
+  allowPreorder?: boolean;
+}
+
+export interface UpdateProductRequest {
+  name?: string;
+  price?: number;
+  description?: string;
+  isAvailable?: boolean;
+  digitalContent?: string[];
+  allowPreorder?: boolean;
+}
+
+export interface CreateOrderRequest {
+  userId: string;
+  productId: string;
+  quantity: number;
+}
+
+export interface UpdateOrderStatusRequest {
+  status: "pending" | "paid" | "delivered" | "cancelled";
+}
+
+export interface FulfillOrderRequest {
+  content: string[];
+  note?: string;
+}
+
+export interface CreateCategoryRequest {
+  name: string;
+  description?: string;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export interface UpdateCategoryRequest {
+  name?: string;
+  description?: string;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export interface CreateBulkNotificationRequest {
+  title: string;
+  message: string;
+  audience: "all_users" | "active_users" | "specific_users";
+  targetUserIds?: number[];
+}
+
+export interface SendMessageRequest {
+  message: string;
+}
+
+// Query Parameters Interfaces
+export interface GetUsersParams {
   page?: number;
   limit?: number;
-  sort?: string;
   search?: string;
-  filter?: Record<string, any>;
-  [key: string]: any;
 }
 
-export interface IPaginatedResponse<T> {
-  data: T[];
-  metadata: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
+export interface GetProductsParams {
+  page?: number;
+  limit?: number;
+  category?: string;
+  search?: string;
+  minPrice?: number;
+  maxPrice?: number;
 }
 
-export type { IUser, IProduct, ICategory, IOrder, IPaymentTransaction, INotification };
+export interface GetOrdersParams {
+  page?: number;
+  limit?: number;
+  status?: string;
+}
+
+export interface GetPaymentsParams {
+  page?: number;
+  limit?: number;
+  status?: string;
+  provider?: string;
+  userId?: string;
+}
+
+export interface GetNotificationsParams {
+  userId?: string;
+  type?: string;
+}

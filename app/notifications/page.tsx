@@ -42,24 +42,21 @@ export default function NotificationsPage() {
   const [audienceFilter, setAudienceFilter] = useState<string | null>(null)
   const [message, setMessage] = useState("")
   const [title, setTitle] = useState("")
-  const [audience, setAudience] = useState<"all" | "specific_users">("all")
+  const [audience, setAudience] = useState<"all" | "active_users" | "specific_users">("all")
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
   const [selectAll, setSelectAll] = useState(false)
-  const [selectAccepted, setSelectAccepted] = useState(false)
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
   const [isSendingNotification, setIsSendingNotification] = useState(false)
   const [isSuccessDialogOpen, setIsSuccessDialogOpen] = useState(false)
   const [isViewDetailsDialogOpen, setIsViewDetailsDialogOpen] = useState(false)
   const [selectedNotification, setSelectedNotification] = useState<INotification | null>(null)
-  
-  const { toast } = useToast()
 
-  const acceptedUsers = users.filter((user) => user.isAccepted)
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchUsers()
     fetchNotifications()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch users from API
   const fetchUsers = async () => {
@@ -134,26 +131,16 @@ export default function NotificationsPage() {
       notification.message.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesAudience =
-      audienceFilter === null || audienceFilter === "all" || notification.audience === audienceFilter
+      audienceFilter === null || audienceFilter === "all" || 
+      (audienceFilter === "specific" && notification.userId)
 
     return matchesSearch && matchesAudience
   })
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked)
-    setSelectAccepted(false)
     if (checked) {
       setSelectedUserIds(users.map((user) => user.telegramId))
-    } else {
-      setSelectedUserIds([])
-    }
-  }
-
-  const handleSelectAccepted = (checked: boolean) => {
-    setSelectAccepted(checked)
-    setSelectAll(false)
-    if (checked) {
-      setSelectedUserIds(acceptedUsers.map((user) => user.telegramId))
     } else {
       setSelectedUserIds([])
     }
@@ -167,17 +154,16 @@ export default function NotificationsPage() {
     }
   }
 
-  const handleAudienceChange = (value: "all" | "specific_users") => {
+  const handleAudienceChange = (value: "all" | "active_users" | "specific_users") => {
     setAudience(value)
-    if (value === "all") {
+    if (value === "all" || value === "active_users") {
       setSelectedUserIds([])
       setSelectAll(false)
-      setSelectAccepted(false)
     }
   }
 
   const handlePreviewNotification = () => {
-    if (title.trim() && message.trim() && (audience === "all" || selectedUserIds.length > 0)) {
+    if (title.trim() && message.trim() && (audience === "all" || audience === "active_users" || selectedUserIds.length > 0)) {
       setIsPreviewDialogOpen(true)
     }
   }
@@ -194,16 +180,16 @@ export default function NotificationsPage() {
       const notificationData = {
         title: title.trim(),
         message: message.trim(),
-        audience,
+        audience: audience === "all" ? "all_users" as const : audience === "active_users" ? "active_users" as const : "specific_users" as const,
         ...(audience === "specific_users" ? { targetUserIds: selectedUserIds } : {})
       }
       
       // Send to API
-      const result = await api.createNotification(notificationData)
+      const result = await api.createBulkNotification(notificationData)
       logApiOperation("createNotification response", result)
-      
-      // Update local state
-      setNotifications([result, ...notifications])
+
+      // Refresh notifications list to get the latest data
+      await fetchNotifications()
       
       setIsPreviewDialogOpen(false)
       setIsSuccessDialogOpen(true)
@@ -216,7 +202,6 @@ export default function NotificationsPage() {
         setAudience("all")
         setSelectedUserIds([])
         setSelectAll(false)
-        setSelectAccepted(false)
       }, 2000)
       
     } catch (error) {
@@ -302,13 +287,14 @@ export default function NotificationsPage() {
                 <Label htmlFor="audience">Target Audience</Label>
                 <Select
                   value={audience}
-                  onValueChange={(value: "all" | "specific_users") => handleAudienceChange(value)}
+                  onValueChange={(value: "all" | "active_users" | "specific_users") => handleAudienceChange(value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select audience" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Users</SelectItem>
+                    <SelectItem value="active_users">Active Users Only</SelectItem>
                     <SelectItem value="specific_users">Specific Users</SelectItem>
                   </SelectContent>
                 </Select>
@@ -316,23 +302,13 @@ export default function NotificationsPage() {
 
               {audience === "specific_users" && (
                 <div className="space-y-4">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="select-all"
-                        checked={selectAll}
-                        onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
-                      />
-                      <Label htmlFor="select-all">Select all users ({users.length})</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="select-accepted"
-                        checked={selectAccepted}
-                        onCheckedChange={(checked) => handleSelectAccepted(checked as boolean)}
-                      />
-                      <Label htmlFor="select-accepted">Select all accepted users ({acceptedUsers.length})</Label>
-                    </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="select-all"
+                      checked={selectAll}
+                      onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
+                    />
+                    <Label htmlFor="select-all">Select all users ({users.length})</Label>
                   </div>
 
                   <div className="border rounded-md">
@@ -355,7 +331,6 @@ export default function NotificationsPage() {
                             <TableHead className="w-12">Select</TableHead>
                             <TableHead>Telegram ID</TableHead>
                             <TableHead>Username</TableHead>
-                            <TableHead>Status</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -365,12 +340,11 @@ export default function NotificationsPage() {
                                 <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                                 <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                                 <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                                <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                               </TableRow>
                             ))
                           ) : users.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
+                              <TableCell colSpan={3} className="text-center py-4 text-muted-foreground">
                                 No users found
                               </TableCell>
                             </TableRow>
@@ -385,17 +359,6 @@ export default function NotificationsPage() {
                                 </TableCell>
                                 <TableCell>{user.telegramId}</TableCell>
                                 <TableCell>{user.username || "N/A"}</TableCell>
-                                <TableCell>
-                                  {user.isAccepted ? (
-                                    <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100">
-                                      Accepted
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
-                                      Pending
-                                    </Badge>
-                                  )}
-                                </TableCell>
                               </TableRow>
                             ))
                           )}
@@ -445,7 +408,7 @@ export default function NotificationsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Audiences</SelectItem>
-                    <SelectItem value="all">All Users</SelectItem>
+                    <SelectItem value="active_users">Active Users</SelectItem>
                     <SelectItem value="specific_users">Specific Users</SelectItem>
                   </SelectContent>
                 </Select>
@@ -484,13 +447,11 @@ export default function NotificationsPage() {
                           <TableCell className="font-medium">{notification.title}</TableCell>
                           <TableCell className="max-w-xs truncate">{notification.message}</TableCell>
                           <TableCell>
-                            {notification.audience === "all" ? (
-                              <Badge variant="outline">All Users</Badge>
-                            ) : (
-                              <Badge variant="outline">{notification.targetUserIds?.length || 0} Users</Badge>
-                            )}
+                            <Badge variant="secondary">
+                              User Specific
+                            </Badge>
                           </TableCell>
-                          <TableCell>{formatDate(notification.createdAt)}</TableCell>
+                          <TableCell>{notification.createdAt ? formatDate(notification.createdAt) : 'N/A'}</TableCell>
                           <TableCell className="text-right">
                             <Button variant="outline" size="sm" onClick={() => handleViewDetails(notification)}>
                               View Details
@@ -584,20 +545,11 @@ export default function NotificationsPage() {
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium text-muted-foreground">Audience</p>
-                <p>
-                  {selectedNotification.audience === "all"
-                    ? "All users"
-                    : `Specific users (${selectedNotification.targetUserIds?.length || 0})`}
-                </p>
-                {selectedNotification.audience === "specific_users" && selectedNotification.targetUserIds && (
-                  <div className="text-sm text-muted-foreground mt-1">
-                    {getTargetedUsernames(selectedNotification.targetUserIds)}
-                  </div>
-                )}
+                <p>User specific notification</p>
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium text-muted-foreground">Sent At</p>
-                <p>{formatDate(selectedNotification.createdAt)}</p>
+                <p>{selectedNotification.createdAt ? formatDate(selectedNotification.createdAt) : 'N/A'}</p>
               </div>
             </div>
           )}
